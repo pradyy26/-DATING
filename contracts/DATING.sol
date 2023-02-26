@@ -1,23 +1,25 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interface/IReflectionToken.sol";
-import "../interface/IUniswapV2Factory.sol";
-import "../interface/IUniswapV2Pair.sol";
-import "../interface/IUniswapV2Router02.sol";
+import "./interface/IReflectionToken.sol";
+import "./interface/IUniswapV2Factory.sol";
+import "./interface/IUniswapV2Pair.sol";
+import "./interface/IUniswapV2Router02.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "hardhat/console.sol";
 
 contract ReflectionToken is IReflectionToken, Ownable {
     struct FeeTier {
-        uint256 ecoSystemFee;
-        uint256 liquidityFee;
+        uint256 developmentFee;
         uint256 taxFee;
-        uint256 ownerFee;
-        uint256 burnFee;
-        address ecoSystem;
-        address owner;
+        uint256 staffFee;
+        uint256 marketingFee;
+        uint256 liquidityFee;
+        address developmentWallet;
+        address staffWallet;
+        address marketingWallet;
     }
 
     struct FeeValues {
@@ -25,20 +27,20 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uint256 rTransferAmount;
         uint256 rFee;
         uint256 tTransferAmount;
-        uint256 tEchoSystem;
+        uint256 tDevelopment;
         uint256 tLiquidity;
         uint256 tFee;
-        uint256 tOwner;
-        uint256 tBurn;
+        uint256 tStaff;
+        uint256 tMarketing;
     }
 
     struct tFeeValues {
         uint256 tTransferAmount;
-        uint256 tEchoSystem;
+        uint256 tDevelopment;
         uint256 tLiquidity;
         uint256 tFee;
-        uint256 tOwner;
-        uint256 tBurn;
+        uint256 tStaff;
+        uint256 tMarketing;
     }
 
     mapping(address => uint256) private _rOwned;
@@ -109,8 +111,9 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _;
     }
 
-    modifier isRouter(address _sender) {
+    modifier isRouter(address _sender,address _receiver) {
         {
+            // BUY TX: when router is the receiver
             uint32 size;
             assembly {
                 size := extcodesize(_sender)
@@ -120,6 +123,24 @@ contract ReflectionToken is IReflectionToken, Ownable {
                     IUniswapV2Router02 _routerCheck = IUniswapV2Router02(_sender);
                     try _routerCheck.factory() returns (address factory) {
                         _accountsTier[_sender] = 1;
+                        console.log("_sender %s", _sender);
+                    } catch {}
+                }
+            }
+        }
+        {
+
+            // SELL TX: when router is the receiver
+            uint32 size;
+            assembly {
+                size := extcodesize(_receiver)
+            }
+            if (size > 0) {
+                if (_accountsTier[_receiver] == 0) {
+                    IUniswapV2Router02 _routerCheck = IUniswapV2Router02(_receiver);
+                    try _routerCheck.factory() returns (address factory) {
+                        _accountsTier[_receiver] = 2;
+                        console.log("_receiver %s", _receiver);
                     } catch {}
                 }
             }
@@ -136,15 +157,15 @@ contract ReflectionToken is IReflectionToken, Ownable {
         _symbol = __symbol;
         _decimals = 9;
 
-        uint tTotal = 1000000 * 10**6 * 10**9;
+        uint tTotal = 111 * 10**6 * 10**9; //111 million
         uint rTotal = (MAX - (MAX % tTotal));
 
         _tTotal = tTotal;
         _rTotal = rTotal;
 
-        maxFee = 1000;
+        maxFee = 1000;//10 percent
 
-        maxTxAmount = 5000 * 10**6 * 10**9;
+        maxTxAmount = 5 * 10**6 * 10**9; //5 million
 
         burnAddress = 0x000000000000000000000000000000000000dEaD;
 
@@ -155,7 +176,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         WETH = uniswapV2Router.WETH();
         // Create a uniswap pair for this new token
         uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory()).createPair(address(this), WETH);
-
+    
         //exclude owner and this contract from fee
         _isExcludedFromFee[ownerAddress] = true;
         _isExcludedFromFee[address(this)] = true;
@@ -163,14 +184,15 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
         // init _feeTiers
 
-        // liquidityFee, taxFee
-        defaultFees = _addTier(0, 500, 500, 0, 0, address(0), address(0));
-        // ecoSystemFee, liquidityFee, taxFee
-        _addTier(50, 50, 100, 0, 0, address(0), address(0));
-        // ecoSystemFee, liquidityFee, taxFee, ownerFee
-        _addTier(50, 50, 100, 100, 0, address(0), address(0));
-        // ecoSystemFee, liquidityFee, taxFee, ownerFee
-        _addTier(100, 125, 125, 150, 0, address(0), address(0));
+        //no fee on transfers
+        // developmentFee, taxFee, staffFee, marketingFee, liquidityFee, developmentWallet, staffWallet
+        defaultFees = _addTier(0, 0, 0, 0, 0, address(0), address(0), address(0));
+        /// BUY TIER ~800(8%)
+        // developmentFee, taxFee, staffFee, marketingFee, liquidityFee, developmentWallet, staffWallet
+        _addTier(100, 100, 300, 300, 0, address(0), address(0), address(0)); 
+        //SELL TIER ~1000(10%)
+        // developmentFee, taxFee, staffFee, marketingFee, liquidityFee, developmentWallet, staffWallet
+        _addTier(200, 100, 300, 400, 0, address(0), address(0), address(0));
 
         emit Transfer(address(0), msg.sender, tTotal);
     }
@@ -318,16 +340,16 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     // functions for setting fees
 
-    function setEcoSystemFeePercent(uint256 _tierIndex, uint256 _ecoSystemFee)
+    function setDevelopmentFeePercent(uint256 _tierIndex, uint256 _developmentFee)
     external
     onlyOwner
     checkTierIndex(_tierIndex)
     {
         FeeTier memory tier = _feeTiers[_tierIndex];
-        _checkFeesChanged(tier, tier.ecoSystemFee, _ecoSystemFee);
-        _feeTiers[_tierIndex].ecoSystemFee = _ecoSystemFee;
+        _checkFeesChanged(tier, tier.developmentFee, _developmentFee);
+        _feeTiers[_tierIndex].developmentFee = _developmentFee;
         if (_tierIndex == 0) {
-            defaultFees.ecoSystemFee = _ecoSystemFee;
+            defaultFees.developmentFee = _developmentFee;
         }
     }
 
@@ -353,56 +375,65 @@ contract ReflectionToken is IReflectionToken, Ownable {
         }
     }
 
-    function setOwnerFeePercent(uint256 _tierIndex, uint256 _ownerFee) external onlyOwner checkTierIndex(_tierIndex) {
+    function setStaffFeePercent(uint256 _tierIndex, uint256 _staffFee) external onlyOwner checkTierIndex(_tierIndex) {
         FeeTier memory tier = _feeTiers[_tierIndex];
-        _checkFeesChanged(tier, tier.ownerFee, _ownerFee);
-        _feeTiers[_tierIndex].ownerFee = _ownerFee;
+        _checkFeesChanged(tier, tier.staffFee, _staffFee);
+        _feeTiers[_tierIndex].staffFee = _staffFee;
         if (_tierIndex == 0) {
-            defaultFees.ownerFee = _ownerFee;
+            defaultFees.staffFee = _staffFee;
         }
     }
 
-    function setBurnFeePercent(uint256 _tierIndex, uint256 _burnFee) external onlyOwner checkTierIndex(_tierIndex) {
+    function setMarketingPercent(uint256 _tierIndex, uint256 _marketingFee) external onlyOwner checkTierIndex(_tierIndex) {
         FeeTier memory tier = _feeTiers[_tierIndex];
-        _checkFeesChanged(tier, tier.burnFee, _burnFee);
-        _feeTiers[_tierIndex].burnFee = _burnFee;
+        _checkFeesChanged(tier, tier.marketingFee, _marketingFee);
+        _feeTiers[_tierIndex].marketingFee = _marketingFee;
         if (_tierIndex == 0) {
-            defaultFees.burnFee = _burnFee;
+            defaultFees.marketingFee = _marketingFee;
         }
     }
 
-    function setEcoSystemFeeAddress(uint256 _tierIndex, address _ecoSystem)
+    function setDevelopmentWallet(uint256 _tierIndex, address _developmentWallet)
     external
     onlyOwner
     checkTierIndex(_tierIndex)
     {
-        require(_ecoSystem != address(0), "ReflectionToken: Address Zero is not allowed");
-        if (!_isExcluded[_ecoSystem]) _excludeFromReward(_ecoSystem);
-        _feeTiers[_tierIndex].ecoSystem = _ecoSystem;
+        require(_developmentWallet != address(0), "ReflectionToken: Address Zero is not allowed");
+        if (!_isExcluded[_developmentWallet]) _excludeFromReward(_developmentWallet);
+        _feeTiers[_tierIndex].developmentWallet = _developmentWallet;
         if (_tierIndex == 0) {
-            defaultFees.ecoSystem = _ecoSystem;
+            defaultFees.developmentWallet = _developmentWallet;
         }
     }
 
-    function setOwnerFeeAddress(uint256 _tierIndex, address _owner) external onlyOwner checkTierIndex(_tierIndex) {
-        require(_owner != address(0), "ReflectionToken: Address Zero is not allowed");
-        if (!_isExcluded[_owner]) _excludeFromReward(_owner);
-        _feeTiers[_tierIndex].owner = _owner;
+    function setStaffWallet(uint256 _tierIndex, address _staffWallet) external onlyOwner checkTierIndex(_tierIndex) {
+        require(_staffWallet != address(0), "ReflectionToken: Address Zero is not allowed");
+        if (!_isExcluded[_staffWallet]) _excludeFromReward(_staffWallet);
+        _feeTiers[_tierIndex].staffWallet = _staffWallet;
         if (_tierIndex == 0) {
-            defaultFees.owner = _owner;
+            defaultFees.staffWallet = _staffWallet;
+        }
+    }
+    function setMarketingWallet(uint256 _tierIndex, address _marketingFeeWallet) external onlyOwner checkTierIndex(_tierIndex) {
+        require(_marketingFeeWallet != address(0), "ReflectionToken: Address Zero is not allowed");
+        if (!_isExcluded[_marketingFeeWallet]) _excludeFromReward(_marketingFeeWallet);
+        _feeTiers[_tierIndex].marketingWallet = _marketingFeeWallet;
+        if (_tierIndex == 0) {
+            defaultFees.marketingWallet = _marketingFeeWallet;
         }
     }
 
     function addTier(
-        uint256 _ecoSystemFee,
-        uint256 _liquidityFee,
+        uint256 _developmentFee,
         uint256 _taxFee,
-        uint256 _ownerFee,
-        uint256 _burnFee,
-        address _ecoSystem,
-        address _owner
+        uint256 _staffFee,
+        uint256 _marketingFee,
+        uint256 _liquidityFee,
+        address _developmentWallet,
+        address _staffWallet,
+        address _marketingWallet
     ) public onlyOwner {
-        _addTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner);
+        _addTier(_developmentFee, _taxFee, _staffFee, _marketingFee,_liquidityFee, _developmentWallet, _staffWallet, _marketingWallet);
     }
 
     // functions related to uniswap
@@ -425,7 +456,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uniswapV2Pair = _uniswapV2Pair;
         WETH = uniswapV2Router.WETH();
     }
-
+ 
     function swapAndEvolve() public onlyOwner lockTheSwap {
         // split the contract balance into halves
         uint256 contractETHBalance = address(this).balance;
@@ -490,19 +521,21 @@ contract ReflectionToken is IReflectionToken, Ownable {
     // internal or private
 
     function _addTier(
-        uint256 _ecoSystemFee,
-        uint256 _liquidityFee,
+        uint256 _developmentFee,
         uint256 _taxFee,
-        uint256 _ownerFee,
-        uint256 _burnFee,
-        address _ecoSystem,
-        address _owner
+        uint256 _staffFee,
+        uint256 _marketingFee,
+        uint256 _liquidityFee,
+        address _developmentWallet,
+        address _staffWallet,
+        address _marketingWallet
     ) internal returns (FeeTier memory) {
         FeeTier memory _newTier = _checkFees(
-            FeeTier(_ecoSystemFee, _liquidityFee, _taxFee, _ownerFee, _burnFee, _ecoSystem, _owner)
+            FeeTier(_developmentFee, _taxFee, _staffFee, _marketingFee, _liquidityFee, _developmentWallet, _staffWallet, _marketingWallet)
         );
-        if (!_isExcluded[_ecoSystem]) _excludeFromReward(_ecoSystem);
-        if (!_isExcluded[_owner]) _excludeFromReward(_owner);
+        if (!_isExcluded[_developmentWallet]) _excludeFromReward(_developmentWallet);
+        if (!_isExcluded[_staffWallet]) _excludeFromReward(_staffWallet);
+        if (!_isExcluded[_marketingWallet]) _excludeFromReward(_marketingWallet);
         _feeTiers.push(_newTier);
 
         return _newTier;
@@ -547,7 +580,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     preventBlacklisted(msg.sender, "ReflectionToken: Address is blacklisted")
     preventBlacklisted(from, "ReflectionToken: From address is blacklisted")
     preventBlacklisted(to, "ReflectionToken: To address is blacklisted")
-    isRouter(msg.sender)
+    isRouter(msg.sender, to)
     {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
@@ -576,15 +609,21 @@ contract ReflectionToken is IReflectionToken, Ownable {
             takeFee = false;
         }
         uint256 tierIndex = 0;
-        if (takeFee) {
-            tierIndex = _accountsTier[from];
 
-            if (msg.sender != from) {
+        address _from = from;
+        address _to = to;
+        uint _amount = amount;
+
+         if (takeFee) {
+            //for other dapps
+            tierIndex = _accountsTier[_from];
+
+            if (msg.sender != _from) {
                 tierIndex = _accountsTier[msg.sender];
             }
         }
         //transfer amount, it will take tax, burn, liquidity fee
-        _tokenTransfer(from, to, amount, tierIndex, takeFee);
+        _tokenTransfer(_from, _to, _amount, tierIndex, takeFee);
     }
 
     function _collectETH(uint256 contractTokenBalance) private lockTheSwap {
@@ -635,6 +674,53 @@ contract ReflectionToken is IReflectionToken, Ownable {
             owner(),
             block.timestamp
         );
+    }
+
+    function addLiquidity(uint256 tokenAmount) public payable {
+        
+        require(IReflectionToken(address(this)).transferFrom(msg.sender, address(this), tokenAmount), "transferFrom is failed");
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+
+        //assuming apprive has been called by owner() on the client
+        // add the liquidity
+        uniswapV2Router.addLiquidityETH{ value: msg.value }(
+            address(this),
+            tokenAmount,
+            0, // slippage is unavoidable
+            0, // slippage is unavoidable
+            owner(),
+            block.timestamp
+        );
+    }
+    function buyTokens() public payable {
+         // generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = uniswapV2Router.WETH();
+        path[1] = address(this);
+        // _approve(owner(), address(uniswapV2Router), msg.value);
+        // make the swap
+        uniswapV2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{ value: msg.value }(
+            0, // accept any amount of Token
+            path,
+            msg.sender,
+            block.timestamp
+        );
+    }
+    function sellTokens(uint256 tokenAmount) public  {
+
+// generate the uniswap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = uniswapV2Router.WETH();
+        _approve(msg.sender, address(uniswapV2Router), tokenAmount);
+        // make the swap
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            msg.sender,
+            block.timestamp
+        );    
     }
 
     //this method is responsible for taking all fee, if takeFee is true
@@ -743,9 +829,10 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uint256 tierIndex
     ) private {
         _takeFee(sender, values.tLiquidity, address(this));
-        _takeFee(sender, values.tEchoSystem, _feeTiers[tierIndex].ecoSystem);
-        _takeFee(sender, values.tOwner, _feeTiers[tierIndex].owner);
-        _takeBurn(sender, values.tBurn);
+        _takeFee(sender, values.tDevelopment, _feeTiers[tierIndex].developmentWallet);
+        _takeFee(sender, values.tMarketing, _feeTiers[tierIndex].marketingWallet);
+        _takeFee(sender, values.tStaff, _feeTiers[tierIndex].staffWallet);
+
     }
 
     // we update _rTotalExcluded and _tTotalExcluded when add, remove wallet from excluded list
@@ -761,7 +848,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uint256 currentRate = _getRate();
         uint256 rAmount = tAmount * currentRate;
         _rOwned[recipient] = _rOwned[recipient] + rAmount;
-
+    
         if (_isExcluded[recipient]) {
             _tOwned[recipient] = _tOwned[recipient] + tAmount;
             _tTotalExcluded = _tTotalExcluded + tAmount;
@@ -877,6 +964,9 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uint256 rSupply = _rTotal - _rTotalExcluded;
         uint256 tSupply = _tTotal - _tTotalExcluded;
 
+        //if total of non staking accounts exceed that of staking accounts, 
+        //use  (_rTotal, _tTotal) as rSupply will be really small
+        //else use (rSupply, tSupply)
         if (rSupply < _rTotal / _tTotal) return (_rTotal, _tTotal);
 
         return (rSupply, tSupply);
@@ -910,7 +1000,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
     function _getValues(uint256 tAmount, uint256 _tierIndex) private view returns (FeeValues memory) {
         tFeeValues memory tValues = _getTValues(tAmount, _tierIndex);
-        uint256 tTransferFee = tValues.tLiquidity + tValues.tEchoSystem + tValues.tOwner + tValues.tBurn;
+        uint256 tTransferFee = tValues.tDevelopment + tValues.tLiquidity + tValues.tStaff + tValues.tMarketing;
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
             tAmount,
             tValues.tFee,
@@ -923,11 +1013,11 @@ contract ReflectionToken is IReflectionToken, Ownable {
             rTransferAmount,
             rFee,
             tValues.tTransferAmount,
-            tValues.tEchoSystem,
+            tValues.tDevelopment,
             tValues.tLiquidity,
             tValues.tFee,
-            tValues.tOwner,
-            tValues.tBurn
+            tValues.tStaff,
+            tValues.tMarketing
         );
     }
 
@@ -935,20 +1025,20 @@ contract ReflectionToken is IReflectionToken, Ownable {
         FeeTier memory tier = _feeTiers[_tierIndex];
         tFeeValues memory tValues = tFeeValues(
             0,
-            _calculateFee(tAmount, tier.ecoSystemFee),
+            _calculateFee(tAmount, tier.developmentFee),
             _calculateFee(tAmount, tier.liquidityFee),
             _calculateFee(tAmount, tier.taxFee),
-            _calculateFee(tAmount, tier.ownerFee),
-            _calculateFee(tAmount, tier.burnFee)
+            _calculateFee(tAmount, tier.staffFee),
+            _calculateFee(tAmount, tier.marketingFee)
         );
 
-        tValues.tTransferAmount = tAmount - tValues.tEchoSystem - tValues.tFee - tValues.tLiquidity - tValues.tOwner - tValues.tBurn;
+        tValues.tTransferAmount = tAmount - tValues.tDevelopment - tValues.tLiquidity - tValues.tFee - tValues.tStaff - tValues.tMarketing;
 
         return tValues;
     }
 
     function _checkFees(FeeTier memory _tier) internal view returns (FeeTier memory) {
-        uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee;
+        uint256 _fees = _tier.developmentFee + _tier.liquidityFee + _tier.taxFee + _tier.staffFee + _tier.marketingFee;
         require(_fees <= maxFee, "ReflectionToken: Fees exceeded max limitation");
 
         return _tier;
@@ -959,7 +1049,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
         uint256 _oldFee,
         uint256 _newFee
     ) internal view {
-        uint256 _fees = _tier.ecoSystemFee + _tier.liquidityFee + _tier.taxFee + _tier.ownerFee + _tier.burnFee - _oldFee + _newFee;
+        uint256 _fees = _tier.developmentFee + _tier.liquidityFee + _tier.taxFee + _tier.staffFee + _tier.marketingFee - _oldFee + _newFee;
 
         require(_fees <= maxFee, "ReflectionToken: Fees exceeded max limitation");
     }
