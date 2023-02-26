@@ -144,8 +144,6 @@ describe("Dating token", function () {
             const balance = await reflectionToken.balanceOf(buyer.address)
 
             console.log(balance.toNumber() / 1e9);
-            console.log(buyer.address);
-            console.log(reflectionToken.address);
             const devWalletBalance = await reflectionToken.balanceOf(accounts[0].address)
             const staffBalance = await reflectionToken.balanceOf(accounts[1].address)
             const marketingBalance = await reflectionToken.balanceOf(accounts[2].address)
@@ -165,26 +163,43 @@ describe("Dating token", function () {
             await reflectionToken.connect(ethWhale).setStaffWallet(2, accounts[1].address)
             await reflectionToken.connect(ethWhale).setMarketingWallet(2, accounts[2].address)
 
-            const buyer = accounts[3]
-            const sellAmount = 10_000 * 1e9
-            await reflectionToken.connect(ethWhale).transfer(buyer.address, sellAmount.toString())
+            const seller = accounts[3]
+            const sellAmount = 1000 * 1e9
+            await ethWhale.sendTransaction({
+                to: seller.address,
+                value: ethers.utils.parseEther("1"), // Sends exactly 1.0 ether
+            });
 
-            await reflectionToken.connect(buyer).approve(reflectionToken.address, sellAmount.toString())
+            await reflectionToken.connect(ethWhale).transfer(seller.address, sellAmount.toString())
 
-            await reflectionToken.connect(buyer).sellTokens(sellAmount)
+            await reflectionToken.connect(seller).approve(reflectionToken.address, sellAmount.toString())
 
-            const balance = await reflectionToken.balanceOf(buyer.address)
+            let balance = await reflectionToken.balanceOf(seller.address)
+            console.log("seller balance before: ",balance.toNumber() / 1e9);
 
-            console.log(balance.toNumber() / 1e9);
-            console.log(buyer.address);
-            console.log(reflectionToken.address);
+            balance = await ethers.provider.getBalance(seller.address);
+            console.log("seller eth balance before: ",balance );
+
+            await reflectionToken.connect(seller).sellTokens(sellAmount)
+
+            balance = await reflectionToken.balanceOf(seller.address)
+            console.log("seller balance after: ",balance.toNumber() / 1e9);
+
+            
+            balance = await ethers.provider.getBalance(seller.address);
+            console.log("seller eth balance after: ",balance );
+
+            
+
+
             const devWalletBalance = await reflectionToken.balanceOf(accounts[0].address)
             const staffBalance = await reflectionToken.balanceOf(accounts[1].address)
             const marketingBalance = await reflectionToken.balanceOf(accounts[2].address)
-            console.log(devWalletBalance.toNumber() / 1e9);
-            console.log(staffBalance.toNumber() / 1e9);
-            console.log(marketingBalance.toNumber() / 1e9);
+            console.log("development wallet: ", devWalletBalance.toNumber() / 1e9);
+            console.log("staff wallet: ",staffBalance.toNumber() / 1e9);
+            console.log("marketing wallet: ",marketingBalance.toNumber() / 1e9);
 
+            
         })
     })
 });

@@ -606,6 +606,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
 
         //if any account belongs to _isExcludedFromFee account then remove the fee
         if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
+
             takeFee = false;
         }
         uint256 tierIndex = 0;
@@ -676,6 +677,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
         );
     }
 
+    //swap functions
+
     function addLiquidity(uint256 tokenAmount) public payable {
         
         require(IReflectionToken(address(this)).transferFrom(msg.sender, address(this), tokenAmount), "transferFrom is failed");
@@ -706,13 +709,15 @@ contract ReflectionToken is IReflectionToken, Ownable {
             block.timestamp
         );
     }
-    function sellTokens(uint256 tokenAmount) public  {
 
+    function sellTokens(uint256 tokenAmount) public  {
 // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(this);
         path[1] = uniswapV2Router.WETH();
-        _approve(msg.sender, address(uniswapV2Router), tokenAmount);
+        require(IReflectionToken(address(this)).transferFrom(msg.sender, address(this), tokenAmount), "transferFrom is failed");
+
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
         // make the swap
         uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
