@@ -101,11 +101,11 @@ describe("Dating token", function () {
 
         it("set fee wallets ", async () => {
             const { reflectionToken, ethWhale, accounts } = await loadFixture(datingTokenFixtures);
-
+            const buyTier = 1
             //set development wallet
             const developmentWallet = accounts[0]
-            await reflectionToken.connect(ethWhale).setDevelopmentWallet(1, developmentWallet.address)
-            const devWallet = await (await reflectionToken.feeTier(1)).developmentWallet
+            await reflectionToken.connect(ethWhale).setDevelopmentWallet(buyTier, developmentWallet.address)
+            const devWallet = await (await reflectionToken.feeTier(buyTier)).developmentWallet
             expect(devWallet).to.be.equal(developmentWallet.address)
 
             //set staff wallet
@@ -133,6 +133,15 @@ describe("Dating token", function () {
             await reflectionToken.connect(ethWhale).setMarketingWallet(2, accounts[2].address)
 
             const buyer = accounts[3]
+            const reflectionWatcher = accounts[4]
+
+            const monitorAmount = 1000 * 1e9
+            await reflectionToken.connect(ethWhale).transfer(reflectionWatcher.address, monitorAmount.toString())
+            let reflectionWatcherBal = await reflectionToken.balanceOf(reflectionWatcher.address)
+            console.log("reflectionWatcherBal before: ", reflectionWatcherBal)
+
+
+
             await ethWhale.sendTransaction({
                 to: buyer.address,
                 value: ethers.utils.parseEther("20000.0"), // Sends exactly 1.0 ether
@@ -143,15 +152,22 @@ describe("Dating token", function () {
 
             const balance = await reflectionToken.balanceOf(buyer.address)
 
-            console.log(balance.toNumber() / 1e9);
+            console.log("new token balance of buyer: ",balance.toNumber() / 1e9);
             const devWalletBalance = await reflectionToken.balanceOf(accounts[0].address)
             const staffBalance = await reflectionToken.balanceOf(accounts[1].address)
             const marketingBalance = await reflectionToken.balanceOf(accounts[2].address)
-            console.log(devWalletBalance.toNumber() / 1e9);
-            console.log(staffBalance.toNumber() / 1e9);
-            console.log(marketingBalance.toNumber() / 1e9);
+             reflectionWatcherBal = await reflectionToken.balanceOf(reflectionWatcher.address)
+
+
+
+            console.log("new token Balance of development wallet: ",devWalletBalance.toNumber() / 1e9);
+            console.log("new token Balance of staff wallet: ",staffBalance.toNumber() / 1e9);
+            console.log("new token Balance of marketing wallet: ",marketingBalance.toNumber() / 1e9);
+
+            console.log("new reflectionWatch Balance: ",reflectionWatcherBal.toNumber() );
 
         })
+
         it("sells tokens and takes sell fee", async () => {
             const { reflectionToken, ethWhale, accounts, reflectionTokenV2Pair } = await loadFixture(datingTokenFixtures);
             //set wallets

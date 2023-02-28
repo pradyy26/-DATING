@@ -179,7 +179,7 @@ contract ReflectionToken is IReflectionToken, Ownable {
     
         //exclude owner and this contract from fee
         _isExcludedFromFee[ownerAddress] = true;
-        _isExcludedFromFee[address(this)] = true;
+        _isExcludedFromFee[address(this)] = true; 
 
 
         // init _feeTiers
@@ -677,6 +677,8 @@ contract ReflectionToken is IReflectionToken, Ownable {
         );
     }
 
+
+    //TODO: remove
     //swap functions
 
     function addLiquidity(uint256 tokenAmount) public payable {
